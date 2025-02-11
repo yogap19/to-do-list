@@ -9,18 +9,22 @@ import {
   deleteDoc,
   doc,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase'; // Import Firebase Firestore
+import { db } from '../lib/firebase';
 
 type Task = {
   id: string;
   text: string;
   completed: boolean;
+  deadline: string; // Format: "YYYY-MM-DDTHH:mm"
 };
 
 export default function TodoList() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [timeRemaining, setTimeRemaining] = useState<{ [key: string]: string }>(
+    {}
+  );
 
-  // Ambil data dari Firestore saat komponen dimuat
+  // Fetch tasks from Firestore
   useEffect(() => {
     const fetchTasks = async () => {
       const querySnapshot = await getDocs(collection(db, 'tasks'));
@@ -34,24 +38,63 @@ export default function TodoList() {
     fetchTasks();
   }, []);
 
-  // Tambah tugas ke Firestore
+  // Countdown Timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newTimeRemaining: { [key: string]: string } = {};
+      tasks.forEach((task) => {
+        const timeLeft = calculateTimeRemaining(task.deadline);
+        newTimeRemaining[task.id] = timeLeft;
+      });
+      setTimeRemaining(newTimeRemaining);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [tasks]);
+
+  // Function to calculate time remaining
+  const calculateTimeRemaining = (deadline: string): string => {
+    const deadlineTime = new Date(deadline).getTime();
+    const now = new Date().getTime();
+    const difference = deadlineTime - now;
+
+    if (difference <= 0) return 'Waktu habis!';
+
+    const hours = Math.floor(difference / (1000 * 60 * 60));
+    const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+    return `${hours}j ${minutes}m ${seconds}d`;
+  };
+
+  // Add Task with Deadline
   const addTask = async (): Promise<void> => {
-    const { value: newTask } = await Swal.fire({
+    const { value: formValues } = await Swal.fire({
       title: 'Tambahkan tugas baru',
-      input: 'text',
-      inputPlaceholder: 'Masukkan tugas...',
+      html:
+        '<input id="swal-input1" class="swal2-input" placeholder="Nama tugas">' +
+        '<input id="swal-input2" type="datetime-local" class="swal2-input">',
+      focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Tambah',
       cancelButtonText: 'Batal',
+      preConfirm: () => {
+        return [
+          (document.getElementById('swal-input1') as HTMLInputElement)?.value,
+          (document.getElementById('swal-input2') as HTMLInputElement)?.value,
+        ];
+      },
     });
 
-    if (newTask && newTask.trim() !== '') {
-      const docRef = await addDoc(collection(db, 'tasks'), {
-        text: newTask,
+    if (formValues && formValues[0] && formValues[1]) {
+      const newTask: Omit<Task, 'id'> = {
+        text: formValues[0],
         completed: false,
-      });
+        deadline: formValues[1],
+      };
 
-      setTasks([...tasks, { id: docRef.id, text: newTask, completed: false }]);
+      const docRef = await addDoc(collection(db, 'tasks'), newTask);
+      setTasks([...tasks, { id: docRef.id, ...newTask }]);
 
       Swal.fire({
         title: 'Berhasil!',
@@ -62,7 +105,7 @@ export default function TodoList() {
     }
   };
 
-  // Toggle status tugas (selesai / belum selesai)
+  // Toggle Task Completion
   const toggleTask = (id: string): void => {
     setTasks(
       tasks.map((task) =>
@@ -71,7 +114,7 @@ export default function TodoList() {
     );
   };
 
-  // Hapus tugas dari Firestore
+  // Delete Task from Firestore
   const deleteTask = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, 'tasks', id));
     setTasks(tasks.filter((task) => task.id !== id));
@@ -97,24 +140,40 @@ export default function TodoList() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="flex justify-between items-center p-2 border-b"
+              className={`flex flex-col justify-between p-2 border-b rounded-lg ${
+                calculateTimeRemaining(task.deadline) === 'Waktu habis!'
+                  ? task.completed
+                    ? 'bg-emerald-400'
+                    : 'bg-red-400'
+                  : calculateTimeRemaining(task.deadline).includes('0j')
+                  ? 'bg-yellow-200'
+                  : 'bg-green-200'
+              }`}
             >
-              <span
-                onClick={() => toggleTask(task.id)}
-                className={`cursor-pointer transition transition-500 ${
-                  task.completed
-                    ? 'line-through text-emerald-500 font-semibold'
-                    : 'font-semibold text-slate-700'
-                }`}
-              >
-                {task.text}
-              </span>
-              <button
-                onClick={() => deleteTask(task.id)}
-                className="text-white bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg"
-              >
-                Hapus
-              </button>
+              <div className="flex justify-between items-center">
+                <span
+                  onClick={() => toggleTask(task.id)}
+                  className={`cursor-pointer transition transition-500 ${
+                    task.completed
+                      ? ' text-slate-700 font-semibold'
+                      : 'font-semibold text-slate-700'
+                  }`}
+                >
+                  {task.text}
+                </span>
+                <button
+                  onClick={() => deleteTask(task.id)}
+                  className="text-white p-1 rounded bg-red-600 hover:bg-red-800"
+                >
+                  Hapus
+                </button>
+              </div>
+              <p className="text-sm text-gray-700">
+                Deadline: {new Date(task.deadline).toLocaleString()}
+              </p>
+              <p className="text-xs font-semibold text-slate-700">
+                ⏳ {timeRemaining[task.id] || 'Menghitung...'}
+              </p>
             </motion.li>
           ))}
         </AnimatePresence>
