@@ -143,8 +143,8 @@ export default function TodoList() {
               className={`flex flex-col justify-between p-2 border-b rounded-lg ${
                 calculateTimeRemaining(task.deadline) === 'Waktu habis!'
                   ? task.completed
-                    ? 'bg-emerald-400'
-                    : 'bg-red-400'
+                    ? 'bg-emerald-200'
+                    : 'bg-red-200'
                   : calculateTimeRemaining(task.deadline).includes('0j')
                   ? 'bg-yellow-200'
                   : 'bg-green-200'
