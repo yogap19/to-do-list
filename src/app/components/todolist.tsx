@@ -27,12 +27,16 @@ export default function TodoList() {
 
   useEffect(() => {
     const fetchTasks = async () => {
-      const querySnapshot = await getDocs(collection(db, 'tasks'));
-      const tasksData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Task[];
-      setTasks(tasksData);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'tasks'));
+        const tasksData = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Task[];
+        setTasks(tasksData);
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+      }
     };
     fetchTasks();
   }, []);
@@ -82,13 +86,33 @@ export default function TodoList() {
     });
 
     if (formValues && formValues[0] && formValues[1]) {
-      const newTask: Omit<Task, 'id'> = {
-        text: formValues[0],
-        completed: false,
-        deadline: formValues[1],
-      };
-      const docRef = await addDoc(collection(db, 'tasks'), newTask);
-      setTasks([...tasks, { id: docRef.id, ...newTask }]);
+      try {
+        const newTask: Omit<Task, 'id'> = {
+          text: formValues[0],
+          completed: false,
+          deadline: formValues[1],
+        };
+        const docRef = await addDoc(collection(db, 'tasks'), newTask);
+        setTasks([...tasks, { id: docRef.id, ...newTask }]);
+
+        // ✅ Notifikasi sukses setelah berhasil menambahkan tugas
+        Swal.fire({
+          title: 'Berhasil!',
+          text: 'Tugas baru telah ditambahkan.',
+          icon: 'success',
+          confirmButtonText: 'OK',
+        });
+      } catch (error) {
+        console.error('Error menambahkan tugas:', error);
+
+        // ❌ Notifikasi error jika gagal menambahkan tugas
+        Swal.fire({
+          title: 'Oops!',
+          text: 'Gagal menambahkan tugas. Coba lagi nanti.',
+          icon: 'error',
+          confirmButtonText: 'OK',
+        });
+      }
     }
   };
 
